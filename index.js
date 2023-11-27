@@ -27,6 +27,11 @@ const assetsCollection = client.db("anifaAMS").collection("assetsList");
 const employerAssetsCollection = client
   .db("anifaAMS")
   .collection("employeeAssets");
+const customRequestCollection = client
+  .db("anifaAMS")
+  .collection("customRequest");
+
+const usersCollection = client.db("anifaAMS").collection("users");
 
 async function run() {
   try {
@@ -63,6 +68,25 @@ async function run() {
         res.send(result);
       } catch (error) {}
     });
+
+    // custom request collections
+
+    app.get("/custom-request", async (req, res) => {
+      try {
+        const result = await customRequestCollection.find().toArray();
+        res.send(result);
+      } catch (error) {}
+    });
+
+    app.post("/custom-request", async (req, res) => {
+      try {
+        const assets = req.body;
+        const result = await customRequestCollection.insertOne(assets);
+        res.send(result);
+      } catch (error) {}
+    });
+
+    //
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
