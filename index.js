@@ -32,6 +32,7 @@ const customRequestCollection = client
   .collection("customRequest");
 
 const usersCollection = client.db("anifaAMS").collection("users");
+const adminCollection = client.db("anifaAMS").collection("admin");
 
 async function run() {
   try {
@@ -58,9 +59,12 @@ async function run() {
 
     app.get("/my-assets", async (req, res) => {
       try {
+        const email = req.query.email;
         const filter = req.query;
+
         console.log(filter);
         const query = {
+          email: email,
           assetName: { $regex: filter.search, $options: "i" },
         };
 
@@ -73,7 +77,10 @@ async function run() {
 
     app.get("/custom-request", async (req, res) => {
       try {
-        const result = await customRequestCollection.find().toArray();
+        const email = req.query.email;
+        const query = { email: email };
+        console.log(query);
+        const result = await customRequestCollection.find(query).toArray();
         res.send(result);
       } catch (error) {}
     });
@@ -86,7 +93,59 @@ async function run() {
       } catch (error) {}
     });
 
-    //
+    // users collection
+
+    app.post("/users", async (req, res) => {
+      try {
+        const user = req.body;
+
+        const query = { email: user.email };
+        const existingUser = await usersCollection.findOne(query);
+        if (existingUser) {
+          return res.send({ message: "User already exist", insertedId: null });
+        }
+        const result = await usersCollection.insertOne(user);
+        res.send(result);
+      } catch (error) {}
+    });
+
+    app.get("/users", async (req, res) => {
+      try {
+        const result = await usersCollection.find().toArray();
+        res.send(result);
+      } catch (error) {}
+    });
+
+    // app.get("/users/admin/:email", async (req, res) => {
+    //   try {
+    //     const email = req.params.email;
+
+    //     const query = { email: email };
+    //     const user = await usersCollection.findOne(query);
+
+    //     let admin = false;
+    //     if (user) {
+    //       admin = user?.role === "admin";
+    //     }
+    //     res.send({ admin });
+    //   } catch (error) {}
+    // });
+
+    app.get("/users/admin/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const query = { email: email };
+
+        const user = await usersCollection.findOne(query);
+
+        let admin = false;
+        if (user) {
+          admin = user?.role === "admin";
+        }
+
+        res.send({ admin });
+      } catch (error) {}
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
