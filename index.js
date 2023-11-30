@@ -3,10 +3,12 @@ const cors = require("cors");
 require("dotenv").config();
 const app = express();
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 
 const port = process.env.PORT || 5000;
+
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 
 // middleware
 app.use(cors());
@@ -33,6 +35,9 @@ const customRequestCollection = client
 
 const usersCollection = client.db("anifaAMS").collection("users");
 const adminCollection = client.db("anifaAMS").collection("admin");
+const teamCollection = client.db("anifaAMS").collection("team");
+
+const packagesCollection = client.db("anifaAMS").collection("packages");
 
 async function run() {
   try {
@@ -75,6 +80,19 @@ async function run() {
       });
     };
 
+    // admin
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "Forbidden access" });
+      }
+      next();
+    };
+
     // assets list get
 
     app.get("/assets", verifyToken, async (req, res) => {
@@ -99,9 +117,32 @@ async function run() {
       } catch (error) {}
     });
 
+    app.put("/assets/:id", async (req, res) => {
+      try {
+        const item = req.body;
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            additionalInformation: item.additionalInformation,
+            requestDate: item.requestDate,
+          },
+        };
+
+        const result = await assetsCollection.updateOne(
+          filter,
+          updateDoc,
+          options
+        );
+
+        res.send(result);
+      } catch (error) {}
+    });
+
     // employer assets list
 
-    app.get("/my-assets", async (req, res) => {
+    app.get("/my-assets", verifyToken, async (req, res) => {
       try {
         const email = req.query.email;
         const filter = req.query;
@@ -119,12 +160,20 @@ async function run() {
 
     // custom request collections
 
-    app.get("/custom-request", async (req, res) => {
+    app.get("/custom-request", verifyToken, async (req, res) => {
       try {
         const email = req.query.email;
         const query = { email: email };
         console.log(query);
         const result = await customRequestCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {}
+    });
+    // custom request collections
+
+    app.get("/customRequestList", verifyToken, async (req, res) => {
+      try {
+        const result = await customRequestCollection.find().toArray();
         res.send(result);
       } catch (error) {}
     });
@@ -209,6 +258,88 @@ async function run() {
 
         res.send({ admin });
       } catch (error) {}
+    });
+
+    // team collection
+
+    app.get("/team", verifyToken, async (req, res) => {
+      try {
+        const result = await teamCollection.find().toArray();
+        res.send(result);
+      } catch (error) {}
+    });
+
+    app.post("/team", verifyToken, async (req, res) => {
+      try {
+        const member = req.body;
+        const query = { email: member.email };
+        const existingUser = await teamCollection.findOne(query);
+
+        if (existingUser) {
+          return res.send({ message: "User already exist", insertedId: null });
+        }
+
+        const result = await teamCollection.insertOne(member);
+
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+      }
+    });
+
+    app.get("/team/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        console.log(id);
+        const query = { _id: new ObjectId(id) };
+        console.log(query);
+        // const options = {
+        //   projection: { _id: 1, name: 1, category: 1, price: 1, recipe: 1 },
+        // };
+
+        const result = await teamCollection.findOne(query);
+        res.send(result);
+      } catch (error) {}
+    });
+
+    app.delete("/team/:id", verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        console.log(id, query);
+        const result = await teamCollection.deleteOne(query);
+        console.log(result);
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+      }
+    });
+
+    // packages
+
+    app.get("/packages", async (req, res) => {
+      try {
+        const result = await packagesCollection.find().toArray();
+        res.send(result);
+      } catch (error) {}
+    });
+
+    // payment
+
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      console.log(amount, "amount");
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
     });
 
     // Send a ping to confirm a successful connection
